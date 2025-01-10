@@ -1,6 +1,7 @@
-﻿using CubeSolverConsoleApp;
+﻿// L_B_D_R_F_U
 
-// L_B_D_R_F_U
+using CubeSolverConsoleApp;
+
 var input = 0b0000000000_000000000_000000000_000000000_111111111_111111111_111111111;
 var full1 = 0b0000000000_000001101_000000000_100000000_110110110_111111111_011111111;
 
@@ -24,7 +25,7 @@ var target9 = 0b0_101100101_111001101_101001111;
 //  5) solve everything
 //      it means we start from initial, then goto each digit, save it, search path between shortest digits
 
-//Helpers.Print(target9);
+Helpers.PrintOutline(full1);
 
 //var result = SolverDeep.ValidatePath(input, ["D", "U", "R", "U", "R", "L", "Z2", "B", "R'", "M'", "X'"]);
 //Console.WriteLine(target4);
@@ -37,19 +38,19 @@ var target9 = 0b0_101100101_111001101_101001111;
 
 
 
-var result = SolverDeep.SolveCube(full1, target4);
+//var result = SolverDeep.SolveCube(full1, target4);
 
-if (result.Count > 0)
-{
-    Console.WriteLine("Решение найдено:");
-    foreach (var pair in result)
-    {
-        Helpers.Print(pair.state);
-        Console.WriteLine(string.Join(" ", pair.path));
-        Console.WriteLine("---");
-    }
-}
-else
-{
-    Console.WriteLine("Решение не найдено");
-}
+//if (result.Count > 0)
+//{
+//    Console.WriteLine("Решение найдено:");
+//    foreach (var pair in result)
+//    {
+//        Helpers.Print(pair.state);
+//        Console.WriteLine(string.Join(" ", pair.path));
+//        Console.WriteLine("---");
+//    }
+//}
+//else
+//{
+//    Console.WriteLine("Решение не найдено");
+//}
