@@ -25,7 +25,7 @@ var target9 = 0b0_101100101_111001101_101001111;
 //  5) solve everything
 //      it means we start from initial, then goto each digit, save it, search path between shortest digits
 
-Helpers.PrintOutline(full1);
+Helpers.PrintOutline(target4);
 
 //var result = SolverDeep.ValidatePath(input, ["D", "U", "R", "U", "R", "L", "Z2", "B", "R'", "M'", "X'"]);
 //Console.WriteLine(target4);
