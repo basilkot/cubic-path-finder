@@ -5,7 +5,7 @@ namespace CubeSolverConsoleApp;
 
 internal class SolverDeep
 {
-    private static long steps = 0;
+    private static long _steps = 0;
 
     public static long ValidatePath(long state, string[] path)
     {
@@ -56,12 +56,12 @@ internal class SolverDeep
             return true;
         }
 
-        if (path.Count > 10)
+        if (path.Count > 6)
         {
             return false;
         }
 
-        var v = Interlocked.Increment(ref steps);
+        var v = Interlocked.Increment(ref _steps);
         if (v % 1_000_000 == 0)
         {
             Console.WriteLine(ss.ElapsedMilliseconds);
@@ -82,6 +82,8 @@ internal class SolverDeep
                     var pathArray = path.Reverse().ToArray();
                     Helpers.AddToFile(pathArray, newState);
                     solutions.Add((pathArray, newState));
+                    Console.WriteLine("!!!!!!!!!!!!!!!!!!!!!!!!");
+                    Console.WriteLine(string.Join(' ', pathArray));
                 }
                 path.Pop();
             }
