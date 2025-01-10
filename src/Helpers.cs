@@ -81,5 +81,53 @@ internal class Helpers
         File.AppendAllText("result.txt", Convert.ToString(newState, 2).PadLeft(64, '0') + Environment.NewLine);
         File.AppendAllText("result.txt", DateTime.Now.ToLongTimeString() + Environment.NewLine);
     }
+
+
+    public static void PrintOutline(long state)
+    {
+        const string b = "\u2588";
+
+        // convert long to bits array
+        var bits = new bool[64];
+        for (var i = 0; i < 64; i++)
+        {
+            bits[i] = (state & (1L << i)) != 0;
+        }
+
+        string t(int index)
+        {
+            //return bits[index] ? b : " ";
+            return bits[index] ? " " : b;
+        }
+
+        var result = $@"
+      ╔═╤═╤═╗
+      ║{t(00)}│{t(01)}│{t(02)}║
+      ╟─┼─┼─╢
+      ║{t(03)}│{t(04)}│{t(05)}║
+      ╟─┼─┼─╢
+      ║{t(06)}│{t(07)}│{t(08)}║
+╔═╤═╤═╬═╪═╪═╬═╤═╤═╗
+║{t(47)}│{t(46)}│{t(45)}║{t(09)}│{t(10)}│{t(11)}║{t(18)}│{t(19)}│{t(20)}║
+╟─┼─┼─╫─┼─┼─╫─┼─┼─╢
+║{t(50)}│{t(49)}│{t(48)}║{t(12)}│{t(13)}│{t(14)}║{t(21)}│{t(22)}│{t(23)}║
+╟─┼─┼─╫─┼─┼─╫─┼─┼─╢
+║{t(53)}│{t(52)}│{t(51)}║{t(15)}│{t(16)}│{t(17)}║{t(24)}│{t(25)}│{t(26)}║
+╚═╧═╧═╬═╪═╪═╬═╧═╧═╝
+      ║{t(33)}│{t(34)}│{t(35)}║
+      ╟─┼─┼─╢
+      ║{t(30)}│{t(31)}│{t(32)}║
+      ╟─┼─┼─╢
+      ║{t(27)}│{t(28)}│{t(29)}║
+      ╠═╪═╪═╣
+      ║{t(42)}│{t(43)}│{t(44)}║
+      ╟─┼─┼─╢
+      ║{t(39)}│{t(40)}│{t(41)}║
+      ╟─┼─┼─╢
+      ║{t(36)}│{t(37)}│{t(38)}║
+      ╚═╧═╧═╝
+";
+        Console.WriteLine(result);
+    }
 }
 
