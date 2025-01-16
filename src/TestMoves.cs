@@ -1,50 +1,66 @@
 ﻿namespace CubeSolverConsoleApp;
 
-internal class Moves
+internal class TestMoves
 {
-    public static Dictionary<string, Func<long, long>> Steps = new()
+
+    public static void RunTest(string direction)
+    {
+        var source = Enumerable.Range(0, 54).ToArray();
+
+        Test(source, new[] { direction, direction + "'" });
+        Test(source, new[] { direction + "2", direction, direction });
+        Test(source, new[] { direction, direction + "2", direction });
+        Test(source, new[] { direction, direction, direction + "2" });
+        Test(source, new[] { direction, direction, direction, direction });
+        Test(source, new[] { direction + "2", direction + "2" });
+        Test(source, new[] { direction + "2", direction + "'", direction + "'" });
+        Test(source, new[] { direction + "'", direction + "'", direction + "2" });
+        Test(source, new[] { direction + "'", direction + "2", direction + "'" });
+        Test(source, new[] { direction + "'", direction + "'", direction + "'", direction + "'" });
+    }
+
+    public static void Test(int[] source, string[] path)
+    {
+        var expected = new int[source.Length];
+        Array.Copy(source, expected, source.Length);
+
+        var result = source;
+        foreach (var step in path)
+        {
+            result = Steps[step](result);
+        }
+
+        if (!Helpers.Compare(expected, result))
+        {
+            throw new Exception("Test failed: " + string.Join(' ', path));
+        }
+    }
+
+    public static Dictionary<string, Func<int[], int[]>> Steps = new()
     {
         {"U", MoveU },
         {"U'", MoveUi},
         {"U2", MoveU2},
-        {"Uu", MoveUu },
-        {"Uu2", MoveUu2 },
-        {"Uu'", MoveUui },
 
         {"R", MoveR },
         {"R'", MoveRi},
         {"R2", MoveR2},
-        {"Rr", MoveRr},
-        {"Rr2", MoveRr2},
-        {"Rr'", MoveRri},
 
         {"F", MoveF },
         {"F'", MoveFi},
         {"F2", MoveF2},
-        {"Ff", MoveFf},
-        {"Ff2", MoveFf2},
-        {"Ff'", MoveFfi},
 
         {"D", MoveD },
         {"D'", MoveDi},
         {"D2", MoveD2},
-        {"Dd", MoveDd},
-        {"Dd2", MoveDd2},
-        {"Dd'", MoveDdi},
 
         {"L", MoveL },
         {"L'", MoveLi},
         {"L2", MoveL2},
-        {"Ll", MoveLl},
-        {"Ll2", MoveLl2},
-        {"Ll'", MoveLli},
 
         {"B", MoveB },
         {"B'", MoveBi},
         {"B2", MoveB2},
-        {"Bb", MoveBb},
-        {"Bb2", MoveBb2},
-        {"Bb'", MoveBbi},
 
         {"M", MoveM },
         {"M'", MoveMi},
@@ -71,25 +87,7 @@ internal class Moves
         {"Z2", MoveZ2},
     };
 
-    public static IEnumerable<(long state, string step)> GetNextStates(long state)
-    {
-        foreach (var step in Steps.Keys)
-        {
-            yield return (Steps[step](state), step);
-        }
-    }
-
-    //public static IEnumerable<string> GetNextSteps(string lastStep)
-    //{
-    //    var keys = Steps.Keys;
-    //    switch (lastStep)
-    //    {
-    //        case "U": return keys.Except(["U"]);
-    //    }
-    //}
-
-    #region Up
-    public static long MoveU(long state)
+    public static int[] MoveU(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [0, 1, 2, 5, 8, 7, 6, 3,
@@ -104,7 +102,8 @@ internal class Moves
                 9, 10, 11]);
         return result;
     }
-    public static long MoveU2(long state)
+
+    public static int[] MoveU2(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [0, 1, 2, 5, 8, 7, 6, 3,
@@ -119,7 +118,8 @@ internal class Moves
                 18, 19, 20]);
         return result;
     }
-    public static long MoveUi(long state)
+
+    public static int[] MoveUi(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [0, 1, 2, 5, 8, 7, 6, 3,
@@ -134,71 +134,8 @@ internal class Moves
                 38, 37, 36]);
         return result;
     }
-    public static long MoveUu(long state)
-    {
-        var result = Helpers.SwapBitGroups(state,
-            [0, 1, 2, 5, 8, 7, 6, 3,
-                9, 10, 11,
-                18, 19, 20,
-                38, 37, 36,
-                47, 46, 45,
 
-                12,13,14,
-                50,49,48,
-                41,40,39,
-                21,22,23
-            ],
-            [6, 3, 0, 1, 2, 5, 8, 7,
-                18, 19, 20,
-                38, 37, 36,
-                47, 46, 45,
-                9, 10, 11,
-
-                21,22,23,
-                12,13,14,
-                50,49,48,
-                41,40,39
-            ]);
-        return result;
-    }
-    public static long MoveUu2(long state)
-    {
-        var result = MoveUu(MoveUu(state));
-        return result;
-    }
-    public static long MoveUui(long state)
-    {
-        var result = Helpers.SwapBitGroups(state,
-            [
-                0, 1, 2, 5, 8, 7, 6, 3,
-                9, 10, 11,
-                18, 19, 20,
-                38, 37, 36,
-                47, 46, 45,
-
-                12,13,14,
-                50,49,48,
-                41,40,39,
-                21,22,23
-            ],
-            [
-                2, 5, 8, 7, 6, 3, 0, 1,
-                47, 46, 45,
-                9, 10, 11,
-                18, 19, 20,
-                38, 37, 36,
-
-                50,49,48,
-                41,40,39,
-                21,22,23,
-                12,13,14
-            ]);
-        return result;
-    }
-    #endregion
-
-    #region Right
-    public static long MoveR(long state)
+    public static int[] MoveR(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [18, 19, 20, 23, 26, 25, 24, 21,
@@ -213,7 +150,8 @@ internal class Moves
                 35, 32, 29]);
         return result;
     }
-    public static long MoveR2(long state)
+
+    public static int[] MoveR2(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [18, 19, 20, 23, 26, 25, 24, 21,
@@ -228,7 +166,8 @@ internal class Moves
                 44, 41, 38]);
         return result;
     }
-    public static long MoveRi(long state)
+
+    public static int[] MoveRi(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [18, 19, 20, 23, 26, 25, 24, 21,
@@ -243,70 +182,8 @@ internal class Moves
                 2, 5, 8]);
         return result;
     }
-    public static long MoveRr(long state)
-    {
-        var result = Helpers.SwapBitGroups(state,
-            [18, 19, 20, 23, 26, 25, 24, 21,
-                2, 5, 8,
-                44, 41, 38,
-                35, 32, 29,
-                11, 14, 17,
 
-                1,4,7,
-                43,40,37,
-                34,31,28,
-                10,13,16
-            ],
-            [24, 21, 18, 19, 20, 23, 26, 25,
-                11, 14, 17,
-                2, 5, 8,
-                44, 41, 38,
-                35, 32, 29,
-
-                10,13,16,
-                1,4,7,
-                43,40,37,
-                34,31,28
-            ]);
-        return result;
-    }
-    public static long MoveRr2(long state)
-    {
-        var result = MoveRr(MoveRr(state));
-        return result;
-    }
-    public static long MoveRri(long state)
-    {
-        var result = Helpers.SwapBitGroups(state,
-            [18, 19, 20, 23, 26, 25, 24, 21,
-                2, 5, 8,
-                44, 41, 38,
-                35, 32, 29,
-                11, 14, 17,
-
-                1,4,7,
-                43,40,37,
-                34,31,28,
-                10,13,16
-            ],
-            [20, 23, 26, 25, 24, 21, 18, 19,
-                44, 41, 38,
-                35, 32, 29,
-                11, 14, 17,
-                2, 5, 8,
-
-                43,40,37,
-                34,31,28,
-                10,13,16,
-                1,4,7
-            ]);
-
-        return result;
-    }
-    #endregion
-
-    #region Front
-    public static long MoveF(long state)
+    public static int[] MoveF(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [9, 10, 11, 14, 17, 16, 15, 12,
@@ -321,7 +198,8 @@ internal class Moves
                 35, 34, 33]);
         return result;
     }
-    public static long MoveF2(long state)
+
+    public static int[] MoveF2(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [9, 10, 11, 14, 17, 16, 15, 12,
@@ -336,7 +214,8 @@ internal class Moves
                 18, 21, 24]);
         return result;
     }
-    public static long MoveFi(long state)
+
+    public static int[] MoveFi(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [9, 10, 11, 14, 17, 16, 15, 12,
@@ -351,71 +230,8 @@ internal class Moves
                 6, 7, 8]);
         return result;
     }
-    public static long MoveFf(long state)
-    {
-        var result = Helpers.SwapBitGroups(state,
-            [9, 10, 11, 14, 17, 16, 15, 12,
-                6, 7, 8,
-                18, 21, 24,
-                35, 34, 33,
-                51, 48, 45,
 
-                3,4,5,
-                19,22,25,
-                32,31,30,
-                52,49,46
-            ],
-            [15, 12, 9, 10, 11, 14, 17, 16,
-                51, 48, 45,
-                6, 7, 8,
-                18, 21, 24,
-                35, 34, 33,
-
-                52,49,46,
-                3,4,5,
-                19,22,25,
-                32,31,30
-            ]);
-        return result;
-    }
-    public static long MoveFf2(long state)
-    {
-        var result = MoveFf(MoveFf(state));
-        return result;
-    }
-    public static long MoveFfi(long state)
-    {
-        var result = Helpers.SwapBitGroups(state,
-            [9, 10, 11, 14, 17, 16, 15, 12,
-                6, 7, 8,
-                18, 21, 24,
-                35, 34, 33,
-                51, 48, 45,
-
-                3,4,5,
-                19,22,25,
-                32,31,30,
-                52,49,46
-            ],
-            [11, 14, 17, 16, 15, 12, 9, 10,
-                18, 21, 24,
-                35, 34, 33,
-                51, 48, 45,
-                6, 7, 8,
-
-                19,22,25,
-                32,31,30,
-                52,49,46,
-                3,4,5
-            ]);
-
-
-        return result;
-    }
-    #endregion
-
-    #region Down
-    public static long MoveD(long state)
+    public static int[] MoveD(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [27,28,29,32,35,34,33,30,
@@ -430,7 +246,8 @@ internal class Moves
                 44,43,42]);
         return result;
     }
-    public static long MoveD2(long state)
+
+    public static int[] MoveD2(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [27,28,29,32,35,34,33,30,
@@ -445,7 +262,8 @@ internal class Moves
                 53,52,51]);
         return result;
     }
-    public static long MoveDi(long state)
+
+    public static int[] MoveDi(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [27,28,29,32,35,34,33,30,
@@ -460,69 +278,8 @@ internal class Moves
                 15,16,17]);
         return result;
     }
-    public static long MoveDd(long state)
-    {
-        var result = Helpers.SwapBitGroups(state,
-            [27,28,29,32,35,34,33,30,
-                15,16,17,
-                53,52,51,
-                44,43,42,
-                24,25,26,
 
-                12,13,14,
-                50,49,48,
-                41,40,39,
-                21,22,23
-            ],
-            [33,30,27,28,29,32,35,34,
-                24,25,26,
-                15,16,17,
-                53,52,51,
-                44,43,42,
-
-                21,22,23,
-                12,13,14,
-                50,49,48,
-                41,40,39
-            ]);
-        return result;
-    }
-    public static long MoveDd2(long state)
-    {
-        var result = MoveDd(MoveDd(state));
-        return result;
-    }
-    public static long MoveDdi(long state)
-    {
-        var result = Helpers.SwapBitGroups(state,
-            [27,28,29,32,35,34,33,30,
-                15,16,17,
-                53,52,51,
-                44,43,42,
-                24,25,26,
-
-                12,13,14,
-                50,49,48,
-                41,40,39,
-                21,22,23
-            ],
-            [29,32,35,34,33,30,27,28,
-                53,52,51,
-                44,43,42,
-                24,25,26,
-                15,16,17,
-
-                50,49,48,
-                41,40,39,
-                21,22,23,
-                12,13,14
-            ]);
-        return result;
-    }
-    #endregion
-
-    #region Left
-    public static long MoveL(long state)
+    public static int[] MoveL(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [45,46,47,50,53,52,51,48,
@@ -537,7 +294,8 @@ internal class Moves
                 33,30,27]);
         return result;
     }
-    public static long MoveL2(long state)
+
+    public static int[] MoveL2(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [45,46,47,50,53,52,51,48,
@@ -552,7 +310,8 @@ internal class Moves
                 42,39,36]);
         return result;
     }
-    public static long MoveLi(long state)
+
+    public static int[] MoveLi(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [45,46,47,50,53,52,51,48,
@@ -567,69 +326,8 @@ internal class Moves
                 0,3,6]);
         return result;
     }
-    public static long MoveLl(long state)
-    {
-        var result = Helpers.SwapBitGroups(state,
-            [45,46,47,50,53,52,51,48,
-                0,3,6,
-                42,39,36,
-                33,30,27,
-                9,12,15,
 
-                1,4,7,
-                43,40,37,
-                34,31,28,
-                10,13,16
-            ],
-            [51,48,45,46,47,50,53,52,
-                9,12,15,
-                0,3,6,
-                42,39,36,
-                33,30,27,
-
-                10,13,16,
-                1,4,7,
-                43,40,37,
-                34,31,28
-            ]);
-        return result;
-    }
-    public static long MoveLl2(long state)
-    {
-        var result = MoveLl(MoveLl(state));
-        return result;
-    }
-    public static long MoveLli(long state)
-    {
-        var result = Helpers.SwapBitGroups(state,
-            [45,46,47,50,53,52,51,48,
-                0,3,6,
-                42,39,36,
-                33,30,27,
-                9,12,15,
-
-                1,4,7,
-                43,40,37,
-                34,31,28,
-                10,13,16
-            ],
-            [47,50,53,52,51,48,45,46,
-                42,39,36,
-                33,30,27,
-                9,12,15,
-                0,3,6,
-
-                43,40,37,
-                34,31,28,
-                10,13,16,
-                1,4,7
-            ]);
-        return result;
-    }
-    #endregion
-
-    #region Back
-    public static long MoveB(long state)
+    public static int[] MoveB(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [36,37,38,41,44,43,42,39,
@@ -644,7 +342,7 @@ internal class Moves
                 29,28,27]);
         return result;
     }
-    public static long MoveB2(long state)
+    public static int[] MoveB2(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [36,37,38,41,44,43,42,39,
@@ -659,7 +357,7 @@ internal class Moves
                 20,23,26]);
         return result;
     }
-    public static long MoveBi(long state)
+    public static int[] MoveBi(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [36,37,38,41,44,43,42,39,
@@ -674,69 +372,8 @@ internal class Moves
                 0,1,2]);
         return result;
     }
-    public static long MoveBb(long state)
-    {
-        var result = Helpers.SwapBitGroups(state,
-            [36,37,38,41,44,43,42,39,
-                0,1,2,
-                20,23,26,
-                29,28,27,
-                53,50,47,
 
-                3,4,5,
-                19,22,25,
-                32,31,30,
-                52,49,46
-            ],
-            [42,39,36,37,38,41,44,43,
-                53,50,47,
-                0,1,2,
-                20,23,26,
-                29,28,27,
-
-                52,49,46,
-                3,4,5,
-                19,22,25,
-                32,31,30
-            ]);
-        return result;
-    }
-    public static long MoveBb2(long state)
-    {
-        var result = MoveBb(MoveBb(state));
-        return result;
-    }
-    public static long MoveBbi(long state)
-    {
-        var result = Helpers.SwapBitGroups(state,
-            [36,37,38,41,44,43,42,39,
-                0,1,2,
-                20,23,26,
-                29,28,27,
-                53,50,47,
-
-                3,4,5,
-                19,22,25,
-                32,31,30,
-                52,49,46
-            ],
-            [38,41,44,43,42,39,36,37,
-                20,23,26,
-                29,28,27,
-                53,50,47,
-                0,1,2,
-
-                19,22,25,
-                32,31,30,
-                52,49,46,
-                3,4,5
-            ]);
-        return result;
-    }
-    #endregion
-
-    #region Middle (between L and R)
-    public static long MoveM(long state)
+    public static int[] MoveM(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [1,4,7,
@@ -749,7 +386,8 @@ internal class Moves
              34,31,28]);
         return result;
     }
-    public static long MoveM2(long state)
+
+    public static int[] MoveM2(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [1,4,7,
@@ -762,7 +400,8 @@ internal class Moves
                 43,40,37]);
         return result;
     }
-    public static long MoveMi(long state)
+
+    public static int[] MoveMi(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [1,4,7,
@@ -775,10 +414,8 @@ internal class Moves
                 1,4,7]);
         return result;
     }
-    #endregion
 
-    #region Equator (between U and D)
-    public static long MoveE(long state)
+    public static int[] MoveE(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [12,13,14,
@@ -791,7 +428,8 @@ internal class Moves
                 41,40,39]);
         return result;
     }
-    public static long MoveE2(long state)
+
+    public static int[] MoveE2(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [12,13,14,
@@ -804,23 +442,22 @@ internal class Moves
                 50,49,48]);
         return result;
     }
-    public static long MoveEi(long state)
+
+    public static int[] MoveEi(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [12,13,14,
                 50,49,48,
                 41,40,39,
                 21,22,23],
-            [50,49,48,
-                41,40,39,
+            [50,49,48
+                ,41,40,39,
                 21,22,23,
                 12,13,14]);
         return result;
     }
-    #endregion
 
-    #region Standing (between B and F)
-    public static long MoveS(long state)
+    public static int[] MoveS(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [3,4,5,
@@ -833,7 +470,8 @@ internal class Moves
                 32,31,30]);
         return result;
     }
-    public static long MoveS2(long state)
+
+    public static int[] MoveS2(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [3,4,5,
@@ -846,7 +484,8 @@ internal class Moves
                 19,22,25]);
         return result;
     }
-    public static long MoveSi(long state)
+
+    public static int[] MoveSi(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [3,4,5,
@@ -859,10 +498,8 @@ internal class Moves
                 3,4,5]);
         return result;
     }
-    #endregion
 
-    #region X axe
-    public static long MoveX(long state)
+    public static int[] MoveX(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [0, 1, 2, 3, 4, 5, 6, 7, 8,
@@ -880,7 +517,8 @@ internal class Moves
         );
         return result;
     }
-    public static long MoveX2(long state)
+
+    public static int[] MoveX2(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [0, 1, 2, 3, 4, 5, 6, 7, 8,
@@ -898,7 +536,8 @@ internal class Moves
         );
         return result;
     }
-    public static long MoveXi(long state)
+
+    public static int[] MoveXi(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [0, 1, 2, 3, 4, 5, 6, 7, 8,
@@ -916,10 +555,8 @@ internal class Moves
         );
         return result;
     }
-    #endregion
 
-    #region Y axe
-    public static long MoveY(long state)
+    public static int[] MoveY(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [0, 1, 2, 3, 5, 6, 7, 8,
@@ -937,7 +574,8 @@ internal class Moves
         );
         return result;
     }
-    public static long MoveY2(long state)
+
+    public static int[] MoveY2(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [0, 1, 2, 3, 5, 6, 7, 8,
@@ -955,7 +593,8 @@ internal class Moves
         );
         return result;
     }
-    public static long MoveYi(long state)
+
+    public static int[] MoveYi(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [0, 1, 2, 3, 5, 6, 7, 8,
@@ -973,10 +612,8 @@ internal class Moves
         );
         return result;
     }
-    #endregion
 
-    #region Z axe
-    public static long MoveZ(long state)
+    public static int[] MoveZ(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [0, 1, 2, 3, 4, 5, 6, 7, 8,
@@ -994,7 +631,8 @@ internal class Moves
         );
         return result;
     }
-    public static long MoveZ2(long state)
+
+    public static int[] MoveZ2(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [0, 1, 2, 3, 4, 5, 6, 7, 8,
@@ -1012,7 +650,8 @@ internal class Moves
         );
         return result;
     }
-    public static long MoveZi(long state)
+
+    public static int[] MoveZi(int[] state)
     {
         var result = Helpers.SwapBitGroups(state,
             [0, 1, 2, 3, 4, 5, 6, 7, 8,
@@ -1030,5 +669,4 @@ internal class Moves
         );
         return result;
     }
-    #endregion
 }

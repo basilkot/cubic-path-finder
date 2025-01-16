@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "CubeSolverConsoleApp": {
+        "commandName": "Project",
+        "commandLineArgs": "v=ss-0-1.json"
+        //"commandLineArgs": "\"f=0 1\" e=X,X',X2,Y,Y',Y2,Z,Z',Z2 d=7"
+        //"commandLineArgs": "p=0000000000000110010000110010000011010111100101111001101101001111"
+    }
+  }
+}

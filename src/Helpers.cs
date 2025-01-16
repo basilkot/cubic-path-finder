@@ -1,7 +1,15 @@
-﻿namespace CubeSolverConsoleApp;
+﻿using System.Text;
+using System.Text.Json;
 
-internal class Helpers
+namespace CubeSolverConsoleApp;
+
+internal static class Helpers
 {
+    public static string AsString(this long value)
+    {
+        return Convert.ToString(value, 2).PadLeft(64, '0');
+    }
+
     private static string PrintBits(long value, int[] indexes)
     {
         return indexes
@@ -50,6 +58,26 @@ internal class Helpers
         Console.WriteLine();
     }
 
+    public static int[] SwapBitGroups(int[] value, int[] posGroup1, int[] posGroup2)
+    {
+        var groupSize = posGroup2.Length;
+
+        var result = new int[value.Length];
+        Array.Copy(value, result, value.Length);
+
+        for (var i = 0; i < groupSize; i++)
+        {
+            result[posGroup1[i]] = value[posGroup2[i]];
+        }
+
+        return result;
+    }
+
+    public static bool Compare(int[] v1, int[] v2)
+    {
+        return v1.SequenceEqual(v2);
+    }
+
     public static long SwapBitGroups(long value, int[] posGroup1, int[] posGroup2)
     {
         var groupSize = posGroup2.Length;
@@ -66,20 +94,28 @@ internal class Helpers
         return result;
     }
 
-    public static bool Compare(long v1, long v2)
+    public static bool Compare(long v1, long v2, bool checkFull)
     {
+        if (checkFull)
+        {
+            return v1 == v2;
+        }
         const long mask = 0b0000000000_000000000_000000000_000000000_111111111_111111111_111111111;
         var r1 = v1 & mask;
         var r2 = v2 & mask;
         return r1 == r2;
     }
 
-    public static void AddToFile(string[] pathArray, long newState)
+    public static void AddToFile(string msg, string[] pathArray, long newState)
     {
         var path = string.Join(" ", pathArray);
-        File.AppendAllText("result.txt", path + Environment.NewLine);
-        File.AppendAllText("result.txt", Convert.ToString(newState, 2).PadLeft(64, '0') + Environment.NewLine);
-        File.AppendAllText("result.txt", DateTime.Now.ToLongTimeString() + Environment.NewLine);
+        var value = string.Join(Environment.NewLine, new[] {
+            msg,
+            path,
+            newState.AsString(),
+            DateTime.Now.ToLongTimeString()
+        }.Where(x => !string.IsNullOrEmpty(x))) + Environment.NewLine;
+        File.AppendAllText("result.txt", value);
     }
 
 
@@ -128,6 +164,27 @@ internal class Helpers
          ╚══╧══╧══╝
 ";
         Console.WriteLine(result);
+    }
+
+    public static void SaveState(Dictionary<string, List<DeepSearchState>> searchStates, string filename)
+    {
+        var result = JsonSerializer.Serialize(searchStates,
+            new JsonSerializerOptions
+            {
+                WriteIndented = true,
+            }).Replace("\\u0027", "'");
+
+        File.WriteAllText(filename, result, Encoding.UTF8);
+    }
+
+    public static Dictionary<string, List<DeepSearchState>> ReadStates(string filename)
+    {
+        if (File.Exists(filename))
+        {
+            var result = File.ReadAllText(filename);
+            return JsonSerializer.Deserialize<Dictionary<string, List<DeepSearchState>>>(result);
+        }
+        return new Dictionary<string, List<DeepSearchState>>();
     }
 }
 
