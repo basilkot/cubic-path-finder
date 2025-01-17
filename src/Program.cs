@@ -129,10 +129,20 @@ class Program
             }
 
             var source = sourceState.Last();
+            var checkFull = true;
 
-            var target = sourceName == "initial"
-                ? partialStates[targetName]
-                : fullStates[targetName].Last();
+            long t;
+            if (fullStates.ContainsKey(targetName) && fullStates[targetName].Any())
+            {
+                t = fullStates[targetName].Last();
+            }
+            else
+            {
+                t = partialStates[targetName];
+                checkFull = false;
+            }
+
+            var target = t;
 
             var context = new SolveContext
             {
@@ -141,7 +151,7 @@ class Program
                 Target = targetName,
                 SourceState = source,
                 TargetState = target,
-                CheckFull = true,
+                CheckFull = checkFull,
                 MaxDeep = deep,
                 MinDeep = 0,
             };

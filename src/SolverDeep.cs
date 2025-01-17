@@ -56,7 +56,8 @@ internal class SolverDeep
             )
         ).ToArray();
         Console.WriteLine($"Run {tasks.Length} tasks");
-        Console.WriteLine($"Solve {context.Source} => {context.Target}");
+        Console.WriteLine($"Solve {context.Source}: {context.SourceState.AsString()}");
+        Console.WriteLine($"To    {context.Target}: {context.TargetState.AsString()}");
 
         Task.WaitAll(tasks);
         Console.WriteLine($"Checked all solutions for {context.Source} => {context.Target}");
@@ -131,12 +132,12 @@ internal class SolverDeep
                 return true;
             }
         }
-        counter++;
-
         if (path.Count > context.MaxDeep)
         {
             return false;
         }
+
+        counter++;
 
         if (counter % 1_000_000 == 0)
         {
