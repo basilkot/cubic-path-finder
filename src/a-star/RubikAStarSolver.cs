@@ -40,8 +40,14 @@ internal class RubikAStarSolver
         // Множество для проверки, есть ли уже в очереди (или было)
         HashSet<long> inOpenSet = [start];
 
+        var startTime = DateTime.Now;
         while (openSet.Count > 0)
         {
+            if ((DateTime.Now - startTime).TotalMinutes > 4)
+            {
+                return null; // Exit the loop and return null if time limit exceeded
+            }
+
             // Извлекаем вершину с минимальным f
             var current = openSet.Dequeue();
             inOpenSet.Remove(current);
