@@ -2,7 +2,9 @@
   "profiles": {
     "CubeSolverConsoleApp": {
         "commandName": "Project",
-        "commandLineArgs": "v=ss-0-1.json"
+        "commandLineArgs": "w=\"6 S E Ff' M' F E' S' E M2 Ff U' F' R F R' Uu2 F' M2\""
+        //"commandLineArgs": "w=\"6 F E' F' E M' F' E' F2 M2 Uu' F' R F R' Uu2 F' M'\""
+        //"commandLineArgs": "v=ss-0-1.json"
         //"commandLineArgs": "\"f=0 1\" e=X,X',X2,Y,Y',Y2,Z,Z',Z2 d=7"
         //"commandLineArgs": "p=0000000000000110010000110010000011010111100101111001101101001111"
     }

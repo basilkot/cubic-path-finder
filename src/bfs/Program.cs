@@ -80,8 +80,16 @@ class Program
                     if (arg.Length > 1)
                     {
                         var s = arg.Substring(2).Replace("_", "");
-                        var state = Convert.ToInt64(s, 2);
-                        Helpers.PrintOutline(state);
+                        try
+                        {
+                            var state = Convert.ToInt64(s, 2);
+                            Helpers.PrintOutline(state);
+                        }
+                        catch (Exception e)
+                        {
+                            var state = Convert.ToInt64(s);
+                            Helpers.PrintOutline(state);
+                        }
                     }
                     return;
                 }

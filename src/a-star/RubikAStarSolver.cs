@@ -2,6 +2,13 @@
 
 internal class RubikAStarSolver
 {
+
+    private static int GetScores(long start, long target, bool full)
+    {
+        return RubikHeuristics.PDB(start);
+        // return RubikHeuristics.MisplacedStickers(start, target, full);
+    }
+
     /// <summary>
     /// Пример A*-поиска для сборки кубика.
     /// Возвращает список ходов (пока только "U") от start до goal (или null, если не найден).
@@ -18,7 +25,7 @@ internal class RubikAStarSolver
 
         // openSet = множество вершин, которые нужно рассмотреть
         var openSet = new AStarPriorityQueue();
-        openSet.Enqueue(start, RubikHeuristics.MisplacedStickers(start, target, full));
+        openSet.Enqueue(start, GetScores(start, target, full));
 
         // cameFrom[state] = откуда мы пришли в state
         Dictionary<long, long> cameFrom = new();
@@ -34,7 +41,7 @@ internal class RubikAStarSolver
         // fScore[state] = gScore[state] + h(state)
         Dictionary<long, int> fScore = new()
         {
-            [start] = RubikHeuristics.MisplacedStickers(start, target, full)
+            [start] = GetScores(start, target, full)
         };
 
         // Множество для проверки, есть ли уже в очереди (или было)
@@ -43,7 +50,7 @@ internal class RubikAStarSolver
         var startTime = DateTime.Now;
         while (openSet.Count > 0)
         {
-            if ((DateTime.Now - startTime).TotalMinutes > 4)
+            if (context.Time != -1 && (DateTime.Now - startTime).TotalMinutes > context.Time)
             {
                 return null; // Exit the loop and return null if time limit exceeded
             }
@@ -63,10 +70,10 @@ internal class RubikAStarSolver
 
             // Генерируем соседей (применение ходов)
             List<(long state, string move)> neighbors = new();
-            var keys = Moves.Steps.Keys.Except(context.Ignore);
+            var keys = Moves.Steps.Keys.Except(context.Ignore).ToList();
             if (context.RandomizeMovesOrder)
             {
-                keys = keys.OrderBy(x => Guid.NewGuid());
+                keys = keys.OrderBy(x => Guid.NewGuid()).ToList();
             }
             foreach (var key in keys)
             {
@@ -80,7 +87,8 @@ internal class RubikAStarSolver
                 if (!gScore.ContainsKey(neighbor) || tentativeG < gScore[neighbor])
                 {
                     gScore[neighbor] = tentativeG;
-                    var h = RubikHeuristics.MisplacedStickers(neighbor, target, full);
+                    // var h = GetScores(neighbor, target, full);
+                    var h = GetScores(neighbor, target, full);
                     fScore[neighbor] = tentativeG + h;
 
                     cameFrom[neighbor] = current;

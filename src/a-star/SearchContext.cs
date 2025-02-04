@@ -12,4 +12,5 @@ internal class SearchContext
     public bool RandomizeMovesOrder { get; set; }
 
     public string[] Ignore { get; set; }
+	public int Time {get;set;}
 }
