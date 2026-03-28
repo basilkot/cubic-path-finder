@@ -27,7 +27,7 @@ internal class SolverDeep
 
     public static ConcurrentBag<(string[] path, long state)> solutions = new();
 
-    private static Dictionary<string, List<DeepSearchState>> SearchStates { get; } = new();
+    private static ConcurrentDictionary<string, List<DeepSearchState>> SearchStates { get; } = new();
 
     private static CancellationTokenSource Cts = null;
 
@@ -39,7 +39,7 @@ internal class SolverDeep
             var result = Helpers.ReadStates(filename);
             foreach (var (key, value) in result)
             {
-                SearchStates.Add(key, value);
+                SearchStates.TryAdd(key, value);
             }
         }
     }
@@ -98,7 +98,7 @@ internal class SolverDeep
         {
             if (!SearchStates.ContainsKey(step))
             {
-                SearchStates.Add(step, new List<DeepSearchState>());
+                SearchStates.TryAdd(step, new List<DeepSearchState>());
             }
 
             path.Push(step);
@@ -129,7 +129,7 @@ internal class SolverDeep
                 Console.WriteLine("!!!!!!!!!!!!!!!!!!!!!!!!");
                 Console.WriteLine(string.Join(' ', pathArray));
                 Helpers.PrintOutline(state);
-                return true;
+                // return true;
             }
         }
         if (path.Count > context.MaxDeep)

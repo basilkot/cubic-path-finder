@@ -44,7 +44,7 @@ class Program
 
         var skip = 0;
         string[] find = null;
-        var deep = 7;
+        var deep = 10;
         var count = 1;
         if (args.Length > 0)
         {

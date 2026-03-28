@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Collections.Concurrent;
+using System.Text;
 using System.Text.Json;
 
 namespace CubeSolverConsoleApp;
@@ -166,7 +167,7 @@ internal static class Helpers
         Console.WriteLine(result);
     }
 
-    public static void SaveState(Dictionary<string, List<DeepSearchState>> searchStates, string filename)
+    public static void SaveState(ConcurrentDictionary<string, List<DeepSearchState>> searchStates, string filename)
     {
         var result = JsonSerializer.Serialize(searchStates,
             new JsonSerializerOptions
