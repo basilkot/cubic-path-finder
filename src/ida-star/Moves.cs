@@ -83,6 +83,14 @@ internal class Moves
         {"F3'", MoveF },
         {"Ff3", MoveFfi },
         {"Ff3'", MoveFf },
+
+        // 180° в обратную сторону — состояние кубика то же, что X2, но позиция слоя -2
+        {"U2'", MoveU2 },
+        {"R2'", MoveR2 },
+        {"F2'", MoveF2 },
+        {"Uu2'", MoveUu2 },
+        {"Rr2'", MoveRr2 },
+        {"Ff2'", MoveFf2 },
     };
 
     #region Up

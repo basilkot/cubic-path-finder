@@ -30,6 +30,8 @@ string[] allowedMoves =
     "Uu3", "Uu3'",
     "Rr3", "Rr3'",
     "Ff3", "Ff3'",
+    "U2'", "R2'", "F2'",
+    "Uu2'", "Rr2'", "Ff2'",
 ];
 
 foreach (var (target, i) in targets.Select((t, i) => (t, i)))

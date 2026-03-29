@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cube Path Visualizer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: monospace; background: #1a1a1a; color: #eee; display: flex; flex-direction: column; height: 100vh; }
+    #canvas-container { flex: 1; position: relative; }
+    canvas { display: block; width: 100%; height: 100%; }
+    #controls {
+      padding: 12px 16px;
+      background: #252525;
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    }
+    #controls label { font-size: 13px; color: #aaa; }
+    #controls input[type="text"] {
+      background: #333; color: #eee; border: 1px solid #555; padding: 4px 8px;
+      font-family: monospace; font-size: 13px; border-radius: 3px;
+    }
+    #state-input { width: 420px; }
+    #path-input { width: 500px; }
+    button {
+      background: #444; color: #eee; border: 1px solid #666; padding: 6px 14px;
+      font-family: monospace; font-size: 13px; cursor: pointer; border-radius: 3px;
+    }
+    button:hover { background: #555; }
+    button:disabled { opacity: 0.4; cursor: default; }
+    #info {
+      padding: 6px 16px; background: #202020; font-size: 13px; color: #888;
+      display: flex; gap: 16px;
+    }
+    #info span { color: #ccc; }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <label>State (54 bits):</label>
+    <input type="text" id="state-input" value="000000000000000000000000000111111111111111111111111111" placeholder="54-bit binary state">
+    <label>Path:</label>
+    <input type="text" id="path-input" value="Rr F' U Uu Ff2 Rr2' Ff' R'" placeholder="e.g. U R' Ff2 Uu">
+    <button id="btn-load">Load</button>
+    <button id="btn-prev" disabled>&larr; Prev</button>
+    <button id="btn-next" disabled>Next &rarr;</button>
+    <button id="btn-reset" disabled>Reset</button>
+  </div>
+  <div id="info">
+    <div>Step: <span id="step-display">0 / 0</span></div>
+    <div>Move: <span id="move-display">-</span></div>
+    <div>Layers: <span id="layers-display">U:0 F:0 R:0 E:0 M:0 S:0</span></div>
+    <div>State: <span id="state-display" style="user-select:all; cursor:text;">-</span></div>
+    <div>Code: <span id="code-display" style="user-select:all; cursor:text;">-</span></div>
+  </div>
+  <div id="canvas-container"></div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ===================== CUBE STATE & MOVES (from C# solver) =====================
+
+    // Bit layout: L_B_D_R_F_U, bits 0-8=U, 9-17=F, 18-26=R, 27-35=D, 36-44=B, 45-53=L
+    // Face order for 3D: each face has 9 stickers
+
+    const FACE_NAMES = ['U', 'F', 'R', 'D', 'B', 'L'];
+
+    // Map from face+sticker to bit index in the 54-bit state
+    // U face: bits 0-8, F face: bits 9-17, R face: bits 18-26
+    // D face: bits 27-35, B face: bits 36-44, L face: bits 45-53
+    function getBit(state, bitIndex) {
+      // state is a string of '0'/'1', index 0 = bit 53 (MSB), index 53 = bit 0 (LSB)
+      return state[53 - bitIndex] === '1' ? 1 : 0;
+    }
+
+    // ===================== 3D CUBE RENDERING =====================
+
+    const WHITE = 0xffffff;
+    const BLACK = 0x1a1a1a;
+    const GRAY = 0x777777;
+    const COLORS = [BLACK, WHITE, GRAY]; // 0=black, 1=white, 2=gray(invisible)
+    const CUBE_SIZE = 0.95;
+    const SPACING = 0.01 * 0.95;
+
+    // 3D cube: 27 small cubes in a 3x3x3 grid
+    // Index: i = x + y*3 + z*9, where x,y,z in [0,1,2]
+    // Faces of each small cube: [right(+x), left(-x), up(+y), down(-y), front(+z), back(-z)]
+
+    // Map bit state to 3D cube face colors
+    // Each face of the Rubik's cube corresponds to specific small cube faces
+    // U face (bits 0-8): top face (+y) of cubes at y=2
+    //   Bit layout (looking down at U face):
+    //     bit0 bit1 bit2    -> z=2,x=0  z=2,x=1  z=2,x=2
+    //     bit3 bit4 bit5    -> z=1,x=0  z=1,x=1  z=1,x=2
+    //     bit6 bit7 bit8    -> z=0,x=0  z=0,x=1  z=0,x=2
+
+    // F face (bits 9-17): front face (+z) of cubes at z=2
+    //     bit9  bit10 bit11  -> x=0,y=2  x=1,y=2  x=2,y=2
+    //     bit12 bit13 bit14  -> x=0,y=1  x=1,y=1  x=2,y=1
+    //     bit15 bit16 bit17  -> x=0,y=0  x=1,y=0  x=2,y=0
+
+    // R face (bits 18-26): right face (+x) of cubes at x=2
+    //     bit18 bit19 bit20  -> z=2,y=2  z=1,y=2  z=0,y=2
+    //     bit21 bit22 bit23  -> z=2,y=1  z=1,y=1  z=0,y=1
+    //     bit24 bit25 bit26  -> z=2,y=0  z=1,y=0  z=0,y=0
+
+    // D face (bits 27-35): bottom face (-y) of cubes at y=0
+    //     bit27 bit28 bit29  -> z=0,x=0  z=0,x=1  z=0,x=2
+    //     bit30 bit31 bit32  -> z=1,x=0  z=1,x=1  z=1,x=2
+    //     bit33 bit34 bit35  -> z=2,x=0  z=2,x=1  z=2,x=2
+
+    // B face (bits 36-44): back face (-z) of cubes at z=0
+    //     bit36 bit37 bit38  -> x=0,y=0  x=1,y=0  x=2,y=0
+    //     bit39 bit40 bit41  -> x=0,y=1  x=1,y=1  x=2,y=1
+    //     bit42 bit43 bit44  -> x=0,y=2  x=1,y=2  x=2,y=2
+
+    // L face (bits 45-53): left face (-x) of cubes at x=0
+    //     bit45 bit46 bit47  -> z=2,y=2  z=1,y=2  z=0,y=2  (reversed)
+    //     bit48 bit49 bit50  -> z=2,y=1  z=1,y=1  z=0,y=1
+    //     bit51 bit52 bit53  -> z=2,y=0  z=1,y=0  z=0,y=0
+
+    function stateToFaceColors(stateStr) {
+      // Returns array of 27 elements, each is [right, left, up, down, front, back] color indices
+      const faces = Array.from({ length: 27 }, () => [2, 2, 2, 2, 2, 2]); // all gray by default
+
+      // U face (y=2, face index 2 = up)
+      const uBits = [
+        [0, 2, 0], [1, 2, 0], [2, 2, 0],  // bits 6,7,8 -> z=0
+        [3, 1, 0], [4, 1, 0], [5, 1, 0],  // bits 3,4,5 -> z=1
+        [6, 0, 0], [7, 0, 0], [8, 0, 0],  // bits 0,1,2 -> z=2
+      ];
+      // bit0-2 at z=0 (back, adjacent to B), bit6-8 at z=2 (front, adjacent to F)
+      const uMap = [
+        { bit: 0, x: 0, z: 0 }, { bit: 1, x: 1, z: 0 }, { bit: 2, x: 2, z: 0 },
+        { bit: 3, x: 0, z: 1 }, { bit: 4, x: 1, z: 1 }, { bit: 5, x: 2, z: 1 },
+        { bit: 6, x: 0, z: 2 }, { bit: 7, x: 1, z: 2 }, { bit: 8, x: 2, z: 2 },
+      ];
+      for (const { bit, x, z } of uMap) {
+        const idx = x + 2 * 3 + z * 9;
+        faces[idx][2] = getBit(stateStr, bit); // up face
+      }
+
+      // F face (z=2, face index 4 = front)
+      const fMap = [
+        { bit: 9, x: 0, y: 2 }, { bit: 10, x: 1, y: 2 }, { bit: 11, x: 2, y: 2 },
+        { bit: 12, x: 0, y: 1 }, { bit: 13, x: 1, y: 1 }, { bit: 14, x: 2, y: 1 },
+        { bit: 15, x: 0, y: 0 }, { bit: 16, x: 1, y: 0 }, { bit: 17, x: 2, y: 0 },
+      ];
+      for (const { bit, x, y } of fMap) {
+        const idx = x + y * 3 + 2 * 9;
+        faces[idx][4] = getBit(stateStr, bit); // front face
+      }
+
+      // R face (x=2, face index 0 = right)
+      const rMap = [
+        { bit: 18, z: 2, y: 2 }, { bit: 19, z: 1, y: 2 }, { bit: 20, z: 0, y: 2 },
+        { bit: 21, z: 2, y: 1 }, { bit: 22, z: 1, y: 1 }, { bit: 23, z: 0, y: 1 },
+        { bit: 24, z: 2, y: 0 }, { bit: 25, z: 1, y: 0 }, { bit: 26, z: 0, y: 0 },
+      ];
+      for (const { bit, z, y } of rMap) {
+        const idx = 2 + y * 3 + z * 9;
+        faces[idx][0] = getBit(stateStr, bit); // right face
+      }
+
+      // D face (y=0, face index 3 = down)
+      const dMap = [
+        { bit: 27, x: 0, z: 0 }, { bit: 28, x: 1, z: 0 }, { bit: 29, x: 2, z: 0 },
+        { bit: 30, x: 0, z: 1 }, { bit: 31, x: 1, z: 1 }, { bit: 32, x: 2, z: 1 },
+        { bit: 33, x: 0, z: 2 }, { bit: 34, x: 1, z: 2 }, { bit: 35, x: 2, z: 2 },
+      ];
+      for (const { bit, x, z } of dMap) {
+        const idx = x + 0 * 3 + z * 9;
+        faces[idx][3] = getBit(stateStr, bit); // down face
+      }
+
+      // B face (z=0, face index 5 = back)
+      // Y flipped: bit36-38 at y=2 (top, adjacent to U), bit42-44 at y=0 (bottom)
+      const bMap = [
+        { bit: 36, x: 0, y: 2 }, { bit: 37, x: 1, y: 2 }, { bit: 38, x: 2, y: 2 },
+        { bit: 39, x: 0, y: 1 }, { bit: 40, x: 1, y: 1 }, { bit: 41, x: 2, y: 1 },
+        { bit: 42, x: 0, y: 0 }, { bit: 43, x: 1, y: 0 }, { bit: 44, x: 2, y: 0 },
+      ];
+      for (const { bit, x, y } of bMap) {
+        const idx = x + y * 3 + 0 * 9;
+        faces[idx][5] = getBit(stateStr, bit); // back face
+      }
+
+      // L face (x=0, face index 1 = left)
+      const lMap = [
+        { bit: 45, z: 2, y: 2 }, { bit: 46, z: 1, y: 2 }, { bit: 47, z: 0, y: 2 },
+        { bit: 48, z: 2, y: 1 }, { bit: 49, z: 1, y: 1 }, { bit: 50, z: 0, y: 1 },
+        { bit: 51, z: 2, y: 0 }, { bit: 52, z: 1, y: 0 }, { bit: 53, z: 0, y: 0 },
+      ];
+      for (const { bit, z, y } of lMap) {
+        const idx = 0 + y * 3 + z * 9;
+        faces[idx][1] = getBit(stateStr, bit); // left face
+      }
+
+      return faces;
+    }
+
+    // ===================== MOVE APPLICATION (bit manipulation in JS) =====================
+
+    function swapBitGroups(state, posGroup1, posGroup2) {
+      // state is a 54-char binary string
+      const bits = state.split('').reverse().map(Number); // bits[i] = bit at position i
+      const result = [...bits];
+      for (let i = 0; i < posGroup2.length; i++) {
+        result[posGroup1[i]] = bits[posGroup2[i]];
+      }
+      return result.reverse().join('');
+    }
+
+    // All moves from the C# Moves.cs, translated to JS
+    const MOVES = {};
+
+    // Helper to define a move
+    function defMove(name, group1, group2) {
+      MOVES[name] = (s) => swapBitGroups(s, group1, group2);
+    }
+    function defMoveFrom(name, baseName, times) {
+      MOVES[name] = (s) => {
+        let r = s;
+        for (let i = 0; i < times; i++) r = MOVES[baseName](r);
+        return r;
+      };
+    }
+
+    // U
+    defMove('U', [0,1,2,5,8,7,6,3, 9,10,11, 18,19,20, 38,37,36, 47,46,45],
+                  [6,3,0,1,2,5,8,7, 18,19,20, 38,37,36, 47,46,45, 9,10,11]);
+    defMove("U'", [0,1,2,5,8,7,6,3, 9,10,11, 18,19,20, 38,37,36, 47,46,45],
+                   [2,5,8,7,6,3,0,1, 47,46,45, 9,10,11, 18,19,20, 38,37,36]);
+    defMove('U2', [0,1,2,5,8,7,6,3, 9,10,11, 18,19,20, 38,37,36, 47,46,45],
+                   [8,7,6,3,0,1,2,5, 38,37,36, 47,46,45, 9,10,11, 18,19,20]);
+    defMove('Uu', [0,1,2,5,8,7,6,3, 9,10,11, 18,19,20, 38,37,36, 47,46,45, 12,13,14, 50,49,48, 41,40,39, 21,22,23],
+                   [6,3,0,1,2,5,8,7, 18,19,20, 38,37,36, 47,46,45, 9,10,11, 21,22,23, 12,13,14, 50,49,48, 41,40,39]);
+    defMove("Uu'", [0,1,2,5,8,7,6,3, 9,10,11, 18,19,20, 38,37,36, 47,46,45, 12,13,14, 50,49,48, 41,40,39, 21,22,23],
+                    [2,5,8,7,6,3,0,1, 47,46,45, 9,10,11, 18,19,20, 38,37,36, 50,49,48, 41,40,39, 21,22,23, 12,13,14]);
+    defMoveFrom('Uu2', 'Uu', 2);
+
+    // R
+    defMove('R', [18,19,20,23,26,25,24,21, 2,5,8, 44,41,38, 35,32,29, 11,14,17],
+                  [24,21,18,19,20,23,26,25, 11,14,17, 2,5,8, 44,41,38, 35,32,29]);
+    defMove("R'", [18,19,20,23,26,25,24,21, 2,5,8, 44,41,38, 35,32,29, 11,14,17],
+                   [20,23,26,25,24,21,18,19, 44,41,38, 35,32,29, 11,14,17, 2,5,8]);
+    defMove('R2', [18,19,20,23,26,25,24,21, 2,5,8, 44,41,38, 35,32,29, 11,14,17],
+                   [26,25,24,21,18,19,20,23, 35,32,29, 11,14,17, 2,5,8, 44,41,38]);
+    defMove('Rr', [18,19,20,23,26,25,24,21, 2,5,8, 44,41,38, 35,32,29, 11,14,17, 1,4,7, 43,40,37, 34,31,28, 10,13,16],
+                   [24,21,18,19,20,23,26,25, 11,14,17, 2,5,8, 44,41,38, 35,32,29, 10,13,16, 1,4,7, 43,40,37, 34,31,28]);
+    defMove("Rr'", [18,19,20,23,26,25,24,21, 2,5,8, 44,41,38, 35,32,29, 11,14,17, 1,4,7, 43,40,37, 34,31,28, 10,13,16],
+                    [20,23,26,25,24,21,18,19, 44,41,38, 35,32,29, 11,14,17, 2,5,8, 43,40,37, 34,31,28, 10,13,16, 1,4,7]);
+    defMoveFrom('Rr2', 'Rr', 2);
+
+    // F
+    defMove('F', [9,10,11,14,17,16,15,12, 6,7,8, 18,21,24, 35,34,33, 51,48,45],
+                  [15,12,9,10,11,14,17,16, 51,48,45, 6,7,8, 18,21,24, 35,34,33]);
+    defMove("F'", [9,10,11,14,17,16,15,12, 6,7,8, 18,21,24, 35,34,33, 51,48,45],
+                   [11,14,17,16,15,12,9,10, 18,21,24, 35,34,33, 51,48,45, 6,7,8]);
+    defMove('F2', [9,10,11,14,17,16,15,12, 6,7,8, 18,21,24, 35,34,33, 51,48,45],
+                   [17,16,15,12,9,10,11,14, 35,34,33, 51,48,45, 6,7,8, 18,21,24]);
+    defMove('Ff', [9,10,11,14,17,16,15,12, 6,7,8, 18,21,24, 35,34,33, 51,48,45, 3,4,5, 19,22,25, 32,31,30, 52,49,46],
+                   [15,12,9,10,11,14,17,16, 51,48,45, 6,7,8, 18,21,24, 35,34,33, 52,49,46, 3,4,5, 19,22,25, 32,31,30]);
+    defMove("Ff'", [9,10,11,14,17,16,15,12, 6,7,8, 18,21,24, 35,34,33, 51,48,45, 3,4,5, 19,22,25, 32,31,30, 52,49,46],
+                    [11,14,17,16,15,12,9,10, 18,21,24, 35,34,33, 51,48,45, 6,7,8, 19,22,25, 32,31,30, 52,49,46, 3,4,5]);
+    defMoveFrom('Ff2', 'Ff', 2);
+
+    // Aliases for 2' and 3 moves (same state, different physical rotation)
+    MOVES["U2'"] = MOVES['U2'];
+    MOVES["R2'"] = MOVES['R2'];
+    MOVES["F2'"] = MOVES['F2'];
+    MOVES["Uu2'"] = MOVES['Uu2'];
+    MOVES["Rr2'"] = MOVES['Rr2'];
+    MOVES["Ff2'"] = MOVES['Ff2'];
+    MOVES["U3"] = MOVES["U'"];
+    MOVES["U3'"] = MOVES["U"];
+    MOVES["R3"] = MOVES["R'"];
+    MOVES["R3'"] = MOVES["R"];
+    MOVES["F3"] = MOVES["F'"];
+    MOVES["F3'"] = MOVES["F"];
+    MOVES["Uu3"] = MOVES["Uu'"];
+    MOVES["Uu3'"] = MOVES["Uu"];
+    MOVES["Rr3"] = MOVES["Rr'"];
+    MOVES["Rr3'"] = MOVES["Rr"];
+    MOVES["Ff3"] = MOVES["Ff'"];
+    MOVES["Ff3'"] = MOVES["Ff"];
+
+    // Inverse moves
+    const INVERSE = {
+      "U": "U'", "U'": "U", "U2": "U2", "U2'": "U2'", "U3": "U3'", "U3'": "U3",
+      "R": "R'", "R'": "R", "R2": "R2", "R2'": "R2'", "R3": "R3'", "R3'": "R3",
+      "F": "F'", "F'": "F", "F2": "F2", "F2'": "F2'", "F3": "F3'", "F3'": "F3",
+      "Uu": "Uu'", "Uu'": "Uu", "Uu2": "Uu2", "Uu2'": "Uu2'", "Uu3": "Uu3'", "Uu3'": "Uu3",
+      "Rr": "Rr'", "Rr'": "Rr", "Rr2": "Rr2", "Rr2'": "Rr2'", "Rr3": "Rr3'", "Rr3'": "Rr3",
+      "Ff": "Ff'", "Ff'": "Ff", "Ff2": "Ff2", "Ff2'": "Ff2'", "Ff3": "Ff3'", "Ff3'": "Ff3",
+    };
+
+    // F=1, Ff=2, R=3, Rr=4, U=5, Uu=6
+    const MOVE_CODE = {
+      "F": "1",    "F'": "-1",    "F2": "11",    "F2'": "-1-1",   "F3": "111",    "F3'": "-1-1-1",
+      "Ff": "2",   "Ff'": "-2",   "Ff2": "22",   "Ff2'": "-2-2",  "Ff3": "222",   "Ff3'": "-2-2-2",
+      "R": "3",    "R'": "-3",    "R2": "33",    "R2'": "-3-3",   "R3": "333",    "R3'": "-3-3-3",
+      "Rr": "4",   "Rr'": "-4",   "Rr2": "44",   "Rr2'": "-4-4",  "Rr3": "444",   "Rr3'": "-4-4-4",
+      "U": "5",    "U'": "-5",    "U2": "55",    "U2'": "-5-5",   "U3": "555",    "U3'": "-5-5-5",
+      "Uu": "6",   "Uu'": "-6",   "Uu2": "66",   "Uu2'": "-6-6",  "Uu3": "666",   "Uu3'": "-6-6-6",
+    };
+
+    function convertPath(moves) {
+      return moves.map(m => MOVE_CODE[m] || '?').join('-');
+    }
+
+    // Layer tracking
+    const LAYER_DELTAS = {
+      "U": [[0,1]], "U'": [[0,-1]], "U2": [[0,2]], "U2'": [[0,-2]], "U3": [[0,3]], "U3'": [[0,-3]],
+      "F": [[1,1]], "F'": [[1,-1]], "F2": [[1,2]], "F2'": [[1,-2]], "F3": [[1,3]], "F3'": [[1,-3]],
+      "R": [[2,1]], "R'": [[2,-1]], "R2": [[2,2]], "R2'": [[2,-2]], "R3": [[2,3]], "R3'": [[2,-3]],
+      "Uu": [[0,1],[3,1]], "Uu'": [[0,-1],[3,-1]], "Uu2": [[0,2],[3,2]], "Uu2'": [[0,-2],[3,-2]], "Uu3": [[0,3],[3,3]], "Uu3'": [[0,-3],[3,-3]],
+      "Rr": [[2,1],[4,1]], "Rr'": [[2,-1],[4,-1]], "Rr2": [[2,2],[4,2]], "Rr2'": [[2,-2],[4,-2]], "Rr3": [[2,3],[4,3]], "Rr3'": [[2,-3],[4,-3]],
+      "Ff": [[1,1],[5,1]], "Ff'": [[1,-1],[5,-1]], "Ff2": [[1,2],[5,2]], "Ff2'": [[1,-2],[5,-2]], "Ff3": [[1,3],[5,3]], "Ff3'": [[1,-3],[5,-3]],
+    };
+
+    // ===================== ANIMATION MAP =====================
+    // 3D cube indices: idx = x + y*3 + z*9
+    const FACE_UP    = [6,7,8,15,16,17,24,25,26]; // y=2
+    const FACE_MID_Y = [3,4,5,12,13,14,21,22,23]; // y=1
+    const FACE_FRONT = [18,19,20,21,22,23,24,25,26]; // z=2
+    const FACE_MID_Z = [9,10,11,12,13,14,15,16,17]; // z=1
+    const FACE_RIGHT = [2,5,8,11,14,17,20,23,26]; // x=2
+    const FACE_MID_X = [1,4,7,10,13,16,19,22,25]; // x=1
+
+    const HP = Math.PI / 2; // 90°
+
+    // { indices, axis, angle }
+    const MOVE_ANIM = {
+      'U':    { i: FACE_UP, a: 'y', r: -HP },
+      "U'":   { i: FACE_UP, a: 'y', r: HP },
+      'U2':   { i: FACE_UP, a: 'y', r: -2*HP },
+      "U2'":  { i: FACE_UP, a: 'y', r: 2*HP },
+      'U3':   { i: FACE_UP, a: 'y', r: -3*HP },
+      "U3'":  { i: FACE_UP, a: 'y', r: 3*HP },
+      'Uu':   { i: [...FACE_UP, ...FACE_MID_Y], a: 'y', r: -HP },
+      "Uu'":  { i: [...FACE_UP, ...FACE_MID_Y], a: 'y', r: HP },
+      'Uu2':  { i: [...FACE_UP, ...FACE_MID_Y], a: 'y', r: -2*HP },
+      "Uu2'": { i: [...FACE_UP, ...FACE_MID_Y], a: 'y', r: 2*HP },
+      'Uu3':  { i: [...FACE_UP, ...FACE_MID_Y], a: 'y', r: -3*HP },
+      "Uu3'": { i: [...FACE_UP, ...FACE_MID_Y], a: 'y', r: 3*HP },
+
+      'R':    { i: FACE_RIGHT, a: 'x', r: -HP },
+      "R'":   { i: FACE_RIGHT, a: 'x', r: HP },
+      'R2':   { i: FACE_RIGHT, a: 'x', r: -2*HP },
+      "R2'":  { i: FACE_RIGHT, a: 'x', r: 2*HP },
+      'R3':   { i: FACE_RIGHT, a: 'x', r: -3*HP },
+      "R3'":  { i: FACE_RIGHT, a: 'x', r: 3*HP },
+      'Rr':   { i: [...FACE_RIGHT, ...FACE_MID_X], a: 'x', r: -HP },
+      "Rr'":  { i: [...FACE_RIGHT, ...FACE_MID_X], a: 'x', r: HP },
+      'Rr2':  { i: [...FACE_RIGHT, ...FACE_MID_X], a: 'x', r: -2*HP },
+      "Rr2'": { i: [...FACE_RIGHT, ...FACE_MID_X], a: 'x', r: 2*HP },
+      'Rr3':  { i: [...FACE_RIGHT, ...FACE_MID_X], a: 'x', r: -3*HP },
+      "Rr3'": { i: [...FACE_RIGHT, ...FACE_MID_X], a: 'x', r: 3*HP },
+
+      'F':    { i: FACE_FRONT, a: 'z', r: -HP },
+      "F'":   { i: FACE_FRONT, a: 'z', r: HP },
+      'F2':   { i: FACE_FRONT, a: 'z', r: -2*HP },
+      "F2'":  { i: FACE_FRONT, a: 'z', r: 2*HP },
+      'F3':   { i: FACE_FRONT, a: 'z', r: -3*HP },
+      "F3'":  { i: FACE_FRONT, a: 'z', r: 3*HP },
+      'Ff':   { i: [...FACE_FRONT, ...FACE_MID_Z], a: 'z', r: -HP },
+      "Ff'":  { i: [...FACE_FRONT, ...FACE_MID_Z], a: 'z', r: HP },
+      'Ff2':  { i: [...FACE_FRONT, ...FACE_MID_Z], a: 'z', r: -2*HP },
+      "Ff2'": { i: [...FACE_FRONT, ...FACE_MID_Z], a: 'z', r: 2*HP },
+      'Ff3':  { i: [...FACE_FRONT, ...FACE_MID_Z], a: 'z', r: -3*HP },
+      "Ff3'": { i: [...FACE_FRONT, ...FACE_MID_Z], a: 'z', r: 3*HP },
+    };
+
+    const ANIM_SPEED_90 = 300;  // ms per 90°
+
+    // ===================== THREE.JS SCENE =====================
+
+    const container = document.getElementById('canvas-container');
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xd0d0d0);
+
+    const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
+    camera.position.set(10, 10, 10);
+    camera.lookAt(0, 0, 0);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    // Lights
+    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambient);
+    for (const pos of [[10, 10, 10], [-10, 10, -10], [0, -10, 0]]) {
+      const light = new THREE.DirectionalLight(0xffffff, 0.4);
+      light.position.set(...pos);
+      scene.add(light);
+    }
+
+    // Оси: красная=X(R), зелёная=Y(U), синяя=Z(F)
+    const axesHelper = new THREE.AxesHelper(5);
+    scene.add(axesHelper);
+
+    // ===================== CUBE BUILDER =====================
+
+    const CUBE_OFFSET = 4; // расстояние между двумя кубиками от центра
+
+    function createCubeMeshes(faceColors, parent) {
+      const meshes = [];
+      for (let z = 0; z < 3; z++) {
+        for (let y = 0; y < 3; y++) {
+          for (let x = 0; x < 3; x++) {
+            const idx = x + y * 3 + z * 9;
+            const colors = faceColors[idx];
+            const geo = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
+            geo.clearGroups();
+            geo.addGroup(0, 6, 0);   // right +x
+            geo.addGroup(6, 6, 1);   // left -x
+            geo.addGroup(12, 6, 2);  // up +y
+            geo.addGroup(18, 6, 3);  // down -y
+            geo.addGroup(24, 6, 4);  // front +z
+            geo.addGroup(30, 6, 5);  // back -z
+            const mats = colors.map(ci => new THREE.MeshPhongMaterial({ color: COLORS[ci] }));
+            const mesh = new THREE.Mesh(geo, mats);
+            mesh.position.set(
+              (x - 1) * (CUBE_SIZE + SPACING),
+              (y - 1) * (CUBE_SIZE + SPACING),
+              (z - 1) * (CUBE_SIZE + SPACING)
+            );
+            meshes[idx] = mesh;
+            parent.add(mesh);
+          }
+        }
+      }
+      return meshes;
+    }
+
+    // Куб 1 — U, F, R видны (камера с +,+,+)
+    let cubeGroup1 = new THREE.Group();
+    cubeGroup1.position.set(-CUBE_OFFSET, 0, 0);
+    scene.add(cubeGroup1);
+    let cubeMeshes1 = [];
+
+    // Куб 2 — D, B, L видны (повёрнут на 180° вокруг оси (1,1,1))
+    let cubeGroup2 = new THREE.Group();
+    cubeGroup2.position.set(0, 0, -CUBE_OFFSET);
+    // поворот: сначала π вокруг (1,0,-1), потом π вокруг (1,1,1) чтобы не вверх ногами
+    const q1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, -1).normalize(), Math.PI);
+    const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 1, 1).normalize(), Math.PI);
+    const cubeRot = q2.multiply(q1);
+    cubeGroup2.quaternion.copy(cubeRot);
+    scene.add(cubeGroup2);
+    let cubeMeshes2 = [];
+
+    function buildBothCubes(faceColors) {
+      cubeGroup1.clear();
+      cubeGroup2.clear();
+      // восстанавливаем поворот куба 2 после clear
+      cubeGroup2.quaternion.copy(cubeRot);
+      cubeMeshes1 = createCubeMeshes(faceColors, cubeGroup1);
+      cubeMeshes2 = createCubeMeshes(faceColors, cubeGroup2);
+    }
+
+    // Animation state
+    let animating = false;
+    let animGroups = []; // [{ group, parent }]
+    let animAxis = 'y';
+    let animTarget = 0;
+    let animStart = 0;
+    let animDuration = 0;
+    let animStartTime = 0;
+    let animCallback = null;
+
+    function animateMove(moveName, newState, onDone) {
+      const anim = MOVE_ANIM[moveName];
+      if (!anim) { onDone(); return; }
+
+      animGroups = [];
+
+      // анимируем оба кубика одновременно
+      for (const { meshes, parent } of [
+        { meshes: cubeMeshes1, parent: cubeGroup1 },
+        { meshes: cubeMeshes2, parent: cubeGroup2 }
+      ]) {
+        const group = new THREE.Group();
+        parent.add(group);
+
+        for (const idx of anim.i) {
+          const mesh = meshes[idx];
+          if (mesh) {
+            const pos = mesh.position.clone();
+            parent.remove(mesh);
+            group.add(mesh);
+            mesh.position.copy(pos);
+          }
+        }
+        animGroups.push({ group, parent });
+      }
+
+      const quarters = Math.round(Math.abs(anim.r) / HP);
+      animAxis = anim.a;
+      animTarget = anim.r;
+      animStart = 0;
+      animDuration = ANIM_SPEED_90 * quarters;
+      animStartTime = performance.now();
+      animating = true;
+      animCallback = () => {
+        for (const { group, parent } of animGroups) {
+          parent.remove(group);
+        }
+        animGroups = [];
+        const padded = newState.padStart(54, '0');
+        buildBothCubes(stateToFaceColors(padded));
+        onDone();
+      };
+    }
+
+    function updateAnimation() {
+      if (!animating) return;
+      const elapsed = performance.now() - animStartTime;
+      const t = Math.min(elapsed / animDuration, 1);
+      const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      const angle = animStart + (animTarget - animStart) * ease;
+      for (const { group } of animGroups) {
+        group.rotation[animAxis] = angle;
+      }
+      if (t >= 1) {
+        animating = false;
+        animCallback();
+      }
+    }
+
+    function onResize() {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+    window.addEventListener('resize', onResize);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      updateAnimation();
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+    onResize();
+
+    // ===================== APP STATE =====================
+
+    let initialState = '';
+    let currentState = '';
+    let path = [];
+    let stepIndex = 0;
+    let layerPositions = [0, 0, 0, 0, 0, 0]; // U, F, R, E, M, S
+
+    const stateInput = document.getElementById('state-input');
+    const pathInput = document.getElementById('path-input');
+    const btnLoad = document.getElementById('btn-load');
+    const btnPrev = document.getElementById('btn-prev');
+    const btnNext = document.getElementById('btn-next');
+    const btnReset = document.getElementById('btn-reset');
+    const stepDisplay = document.getElementById('step-display');
+    const moveDisplay = document.getElementById('move-display');
+    const layersDisplay = document.getElementById('layers-display');
+    const stateDisplay = document.getElementById('state-display');
+    const codeDisplay = document.getElementById('code-display');
+
+    function setButtonsEnabled(enabled) {
+      btnPrev.disabled = !enabled || stepIndex === 0;
+      btnNext.disabled = !enabled || stepIndex >= path.length;
+      btnReset.disabled = !enabled || stepIndex === 0;
+      btnLoad.disabled = !enabled;
+    }
+
+    function updateInfo() {
+      stepDisplay.textContent = `${stepIndex} / ${path.length}`;
+      moveDisplay.textContent = stepIndex > 0 ? path[stepIndex - 1] : '-';
+      const names = ['U', 'F', 'R', 'E', 'M', 'S'];
+      layersDisplay.innerHTML = names.map((n, i) => {
+        const v = layerPositions[i];
+        const over = v < -2 || v > 2;
+        return over ? `<span style="color:#f44">${n}:${v}</span>` : `${n}:${v}`;
+      }).join(' ');
+      stateDisplay.textContent = currentState;
+      codeDisplay.textContent = convertPath(path);
+      setButtonsEnabled(!animating);
+    }
+
+    function renderState(state) {
+      const padded = state.padStart(54, '0');
+      buildBothCubes(stateToFaceColors(padded));
+    }
+
+    function load() {
+      initialState = stateInput.value.trim().padStart(54, '0');
+      currentState = initialState;
+      path = pathInput.value.trim().split(/\s+/).filter(m => m.length > 0 && MOVES[m]);
+      stepIndex = 0;
+      layerPositions = [0, 0, 0, 0, 0, 0];
+      renderState(currentState);
+      updateInfo();
+    }
+
+    function stepForward() {
+      if (animating || stepIndex >= path.length) return;
+      const move = path[stepIndex];
+      const newState = MOVES[move](currentState);
+      for (const [idx, delta] of LAYER_DELTAS[move] || []) {
+        layerPositions[idx] += delta;
+      }
+      stepIndex++;
+      setButtonsEnabled(false);
+      moveDisplay.textContent = move;
+      stepDisplay.textContent = `${stepIndex} / ${path.length}`;
+
+      animateMove(move, newState, () => {
+        currentState = newState;
+        updateInfo();
+      });
+    }
+
+    function stepBack() {
+      if (animating || stepIndex <= 0) return;
+      stepIndex--;
+      const move = path[stepIndex];
+      const inv = INVERSE[move] || move;
+      const newState = MOVES[inv](currentState);
+      for (const [idx, delta] of LAYER_DELTAS[move] || []) {
+        layerPositions[idx] -= delta;
+      }
+      setButtonsEnabled(false);
+      moveDisplay.textContent = inv;
+      stepDisplay.textContent = `${stepIndex} / ${path.length}`;
+
+      animateMove(inv, newState, () => {
+        currentState = newState;
+        updateInfo();
+      });
+    }
+
+    function reset() {
+      if (animating) return;
+      currentState = initialState;
+      stepIndex = 0;
+      layerPositions = [0, 0, 0, 0, 0, 0];
+      renderState(currentState);
+      updateInfo();
+    }
+
+    btnLoad.addEventListener('click', load);
+    btnNext.addEventListener('click', stepForward);
+    btnPrev.addEventListener('click', stepBack);
+    btnReset.addEventListener('click', reset);
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.key === 'ArrowRight') stepForward();
+      if (e.key === 'ArrowLeft') stepBack();
+      if (e.key === 'r') reset();
+    });
+
+    // Initial load
+    load();
+  </script>
+</body>
+</html>
