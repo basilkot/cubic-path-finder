@@ -69,6 +69,20 @@ internal class Moves
         {"Z", MoveZ },
         {"Z'", MoveZi},
         {"Z2", MoveZ2},
+
+        // 270° ходы: U3 = U applied 3 times = same state as U'
+        {"U3", MoveUi },
+        {"U3'", MoveU },
+        {"Uu3", MoveUui },
+        {"Uu3'", MoveUu },
+        {"R3", MoveRi },
+        {"R3'", MoveR },
+        {"Rr3", MoveRri },
+        {"Rr3'", MoveRr },
+        {"F3", MoveFi },
+        {"F3'", MoveF },
+        {"Ff3", MoveFfi },
+        {"Ff3'", MoveFf },
     };
 
     #region Up
