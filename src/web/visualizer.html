@@ -45,6 +45,13 @@
     <button id="btn-next" disabled>Next &rarr;</button>
     <button id="btn-reset" disabled>Reset</button>
     <label style="margin-left:8px"><input type="checkbox" id="chk-fix-centers"> Fix centers</label>
+    <label style="margin-left:8px">Corner:
+      <select id="sel-corner">
+        <option value="0">0 - none</option>
+        <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+        <option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
+      </select>
+    </label>
   </div>
   <div id="info">
     <div>Step: <span id="step-display">0 / 0</span></div>
@@ -88,7 +95,33 @@
     const WHITE = 0xffffff;
     const BLACK = 0x1a1a1a;
     const GRAY = 0x777777;
-    const COLORS = [BLACK, WHITE, GRAY]; // 0=black, 1=white, 2=gray(invisible)
+    const YELLOW = 0xffdd00;
+    const BLUE = 0x2255cc;
+    // 0=black, 1=white, 2=gray, 3=highlighted black (blue), 4=highlighted white (yellow)
+    const COLORS = [BLACK, WHITE, GRAY, BLUE, YELLOW];
+
+    // 8 corners of the cube. Each corner = 3 bit indices (stickers on 3 faces).
+    // Corner numbering 1-8, mapping to bit positions on U/F/R/D/B/L faces.
+    // Corners by 3D position (x,y,z):
+    // 1: UFR (2,2,2) = U:bit8, F:bit11, R:bit18
+    // 2: UFL (0,2,2) = U:bit6, F:bit9,  L:bit45
+    // 3: UBR (2,2,0) = U:bit2, B:bit44, R:bit20
+    // 4: UBL (0,2,0) = U:bit0, B:bit42, L:bit47
+    // 5: DFR (2,0,2) = D:bit35, F:bit17, R:bit24
+    // 6: DFL (0,0,2) = D:bit33, F:bit15, L:bit51
+    // 7: DBR (2,0,0) = D:bit29, B:bit38, R:bit26
+    // 8: DBL (0,0,0) = D:bit27, B:bit36, L:bit53
+    const CORNER_BITS = [
+      [],                    // 0: none
+      [8, 11, 18],           // 1: UFR
+      [6, 9, 45],            // 2: UFL
+      [2, 38, 20],           // 3: UBR
+      [0, 36, 47],           // 4: UBL
+      [35, 17, 24],          // 5: DFR
+      [33, 15, 51],          // 6: DFL
+      [29, 44, 26],          // 7: DBR
+      [27, 42, 53],          // 8: DBL
+    ];
     const CUBE_SIZE = 0.95;
     const SPACING = 0.01 * 0.95;
 
@@ -536,7 +569,7 @@
     controls.enableDamping = true;
 
     // Lights
-    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+    const ambient = new THREE.AmbientLight(0xffffff, 1.5);
     scene.add(ambient);
     for (const pos of [[10, 10, 10], [-10, 10, -10], [0, -10, 0]]) {
       const light = new THREE.DirectionalLight(0xffffff, 0.4);
@@ -656,8 +689,7 @@
           parent.remove(group);
         }
         animGroups = [];
-        const padded = newState.padStart(54, '0');
-        buildBothCubes(stateToFaceColors(padded));
+        renderState(newState);
         onDone();
       };
     }
@@ -747,9 +779,107 @@
       setButtonsEnabled(!animating);
     }
 
+    const selCorner = document.getElementById('sel-corner');
+    let highlightedBits = new Set();
+
+    function initHighlightedBits() {
+      const corner = parseInt(selCorner.value);
+      highlightedBits = new Set(CORNER_BITS[corner] || []);
+    }
+
+    // Track where highlighted bits move after a move is applied
+    function trackBitsForward(moveName) {
+      if (highlightedBits.size === 0) return;
+      const marker = Array(54).fill('0');
+      for (const b of highlightedBits) marker[53 - b] = '1';
+      const moved = MOVES[moveName](marker.join(''));
+      highlightedBits = new Set();
+      for (let i = 0; i < 54; i++) {
+        if (moved[53 - i] === '1') highlightedBits.add(i);
+      }
+    }
+
+    function trackBitsBackward(moveName) {
+      const inv = INVERSE[moveName] || moveName;
+      trackBitsForward(inv);
+    }
+
     function renderState(state) {
       const padded = state.padStart(54, '0');
-      buildBothCubes(stateToFaceColors(padded));
+      const faceColors = stateToFaceColors(padded);
+      // Apply corner highlighting
+      const highlightBits = highlightedBits;
+      if (highlightBits.size > 0) {
+        // For each face color assignment, check if the bit that set it is highlighted
+        // We need to know which bit set each face color. Let's re-walk the mappings.
+        const uMap = [
+          { bit: 0, x: 0, z: 0 }, { bit: 1, x: 1, z: 0 }, { bit: 2, x: 2, z: 0 },
+          { bit: 3, x: 0, z: 1 }, { bit: 4, x: 1, z: 1 }, { bit: 5, x: 2, z: 1 },
+          { bit: 6, x: 0, z: 2 }, { bit: 7, x: 1, z: 2 }, { bit: 8, x: 2, z: 2 },
+        ];
+        for (const { bit, x, z } of uMap) {
+          if (highlightBits.has(bit)) {
+            const idx = x + 2*3 + z*9;
+            faceColors[idx][2] = faceColors[idx][2] === 1 ? 4 : 3; // up face
+          }
+        }
+        const fMap = [
+          { bit: 9, x: 0, y: 2 }, { bit: 10, x: 1, y: 2 }, { bit: 11, x: 2, y: 2 },
+          { bit: 12, x: 0, y: 1 }, { bit: 13, x: 1, y: 1 }, { bit: 14, x: 2, y: 1 },
+          { bit: 15, x: 0, y: 0 }, { bit: 16, x: 1, y: 0 }, { bit: 17, x: 2, y: 0 },
+        ];
+        for (const { bit, x, y } of fMap) {
+          if (highlightBits.has(bit)) {
+            const idx = x + y*3 + 2*9;
+            faceColors[idx][4] = faceColors[idx][4] === 1 ? 4 : 3; // front face
+          }
+        }
+        const rMap = [
+          { bit: 18, z: 2, y: 2 }, { bit: 19, z: 1, y: 2 }, { bit: 20, z: 0, y: 2 },
+          { bit: 21, z: 2, y: 1 }, { bit: 22, z: 1, y: 1 }, { bit: 23, z: 0, y: 1 },
+          { bit: 24, z: 2, y: 0 }, { bit: 25, z: 1, y: 0 }, { bit: 26, z: 0, y: 0 },
+        ];
+        for (const { bit, z, y } of rMap) {
+          if (highlightBits.has(bit)) {
+            const idx = 2 + y*3 + z*9;
+            faceColors[idx][0] = faceColors[idx][0] === 1 ? 4 : 3; // right face
+          }
+        }
+        const dMap = [
+          { bit: 27, x: 0, z: 0 }, { bit: 28, x: 1, z: 0 }, { bit: 29, x: 2, z: 0 },
+          { bit: 30, x: 0, z: 1 }, { bit: 31, x: 1, z: 1 }, { bit: 32, x: 2, z: 1 },
+          { bit: 33, x: 0, z: 2 }, { bit: 34, x: 1, z: 2 }, { bit: 35, x: 2, z: 2 },
+        ];
+        for (const { bit, x, z } of dMap) {
+          if (highlightBits.has(bit)) {
+            const idx = x + 0*3 + z*9;
+            faceColors[idx][3] = faceColors[idx][3] === 1 ? 4 : 3; // down face
+          }
+        }
+        const bMap = [
+          { bit: 36, x: 0, y: 2 }, { bit: 37, x: 1, y: 2 }, { bit: 38, x: 2, y: 2 },
+          { bit: 39, x: 0, y: 1 }, { bit: 40, x: 1, y: 1 }, { bit: 41, x: 2, y: 1 },
+          { bit: 42, x: 0, y: 0 }, { bit: 43, x: 1, y: 0 }, { bit: 44, x: 2, y: 0 },
+        ];
+        for (const { bit, x, y } of bMap) {
+          if (highlightBits.has(bit)) {
+            const idx = x + y*3 + 0*9;
+            faceColors[idx][5] = faceColors[idx][5] === 1 ? 4 : 3; // back face
+          }
+        }
+        const lMap = [
+          { bit: 45, z: 2, y: 2 }, { bit: 46, z: 1, y: 2 }, { bit: 47, z: 0, y: 2 },
+          { bit: 48, z: 2, y: 1 }, { bit: 49, z: 1, y: 1 }, { bit: 50, z: 0, y: 1 },
+          { bit: 51, z: 2, y: 0 }, { bit: 52, z: 1, y: 0 }, { bit: 53, z: 0, y: 0 },
+        ];
+        for (const { bit, z, y } of lMap) {
+          if (highlightBits.has(bit)) {
+            const idx = 0 + y*3 + z*9;
+            faceColors[idx][1] = faceColors[idx][1] === 1 ? 4 : 3; // left face
+          }
+        }
+      }
+      buildBothCubes(faceColors);
     }
 
     function getActivePath() {
@@ -763,6 +893,7 @@
       path = getActivePath();
       stepIndex = 0;
       layerPositions = [0, 0, 0, 0, 0, 0];
+      initHighlightedBits();
       renderState(currentState);
       updateInfo();
     }
@@ -781,6 +912,7 @@
 
       animateMove(move, newState, () => {
         currentState = newState;
+        trackBitsForward(move);
         updateInfo();
       });
     }
@@ -800,6 +932,7 @@
 
       animateMove(inv, newState, () => {
         currentState = newState;
+        trackBitsBackward(move);
         updateInfo();
       });
     }
@@ -809,6 +942,7 @@
       currentState = initialState;
       stepIndex = 0;
       layerPositions = [0, 0, 0, 0, 0, 0];
+      initHighlightedBits();
       renderState(currentState);
       updateInfo();
     }
@@ -820,6 +954,14 @@
     chkFixCenters.addEventListener('change', () => {
       path = getActivePath();
       reset();
+    });
+    selCorner.addEventListener('change', () => {
+      // Recompute highlighted bits from initial corner, then replay moves up to current step
+      initHighlightedBits();
+      for (let s = 0; s < stepIndex; s++) {
+        trackBitsForward(path[s]);
+      }
+      renderState(currentState);
     });
 
     // Keyboard shortcuts
