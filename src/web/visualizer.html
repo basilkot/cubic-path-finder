@@ -910,9 +910,9 @@
       moveDisplay.textContent = move;
       stepDisplay.textContent = `${stepIndex} / ${path.length}`;
 
+      trackBitsForward(move);
       animateMove(move, newState, () => {
         currentState = newState;
-        trackBitsForward(move);
         updateInfo();
       });
     }
@@ -930,9 +930,9 @@
       moveDisplay.textContent = inv;
       stepDisplay.textContent = `${stepIndex} / ${path.length}`;
 
+      trackBitsBackward(move);
       animateMove(inv, newState, () => {
         currentState = newState;
-        trackBitsBackward(move);
         updateInfo();
       });
     }
