@@ -641,6 +641,136 @@
       cubeMeshes2 = createCubeMeshes(faceColors, cubeGroup2);
     }
 
+    // ===================== ROUTE TRAIL =====================
+    // Путь выбранного угла в кадре с фиксированными центрами (всегда, вне зависимости от чекбокса).
+
+    const CORNER_POSITIONS = [
+      null,
+      new THREE.Vector3( 1,  1,  1), // 1 UFR
+      new THREE.Vector3(-1,  1,  1), // 2 UFL
+      new THREE.Vector3( 1,  1, -1), // 3 UBR
+      new THREE.Vector3(-1,  1, -1), // 4 UBL
+      new THREE.Vector3( 1, -1,  1), // 5 DFR
+      new THREE.Vector3(-1, -1,  1), // 6 DFL
+      new THREE.Vector3( 1, -1, -1), // 7 DBR
+      new THREE.Vector3(-1, -1, -1), // 8 DBL
+    ];
+    const CORNER_SCALE = CUBE_SIZE + SPACING;
+    const ROUTE_Y_OFFSET = -3.5;
+    const ROUTE_SUBDIV = 8; // дробление рёбер для гладкого градиента в vertex colors
+
+    const routeGroup = new THREE.Group();
+    routeGroup.position.set(0, ROUTE_Y_OFFSET, 0);
+    scene.add(routeGroup);
+
+    function findCornerForBits(bitSet) {
+      for (let i = 1; i <= 8; i++) {
+        if (CORNER_BITS[i].every(b => bitSet.has(b))) return i;
+      }
+      return 0;
+    }
+
+    function clearRouteGroup() {
+      while (routeGroup.children.length > 0) {
+        const child = routeGroup.children[0];
+        routeGroup.remove(child);
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material.dispose();
+        }
+      }
+    }
+
+    function applyMoveToBitSet(bits, moveName) {
+      const marker = Array(54).fill('0');
+      for (const b of bits) marker[53 - b] = '1';
+      const moved = MOVES[moveName](marker.join(''));
+      const out = new Set();
+      for (let i = 0; i < 54; i++) {
+        if (moved[53 - i] === '1') out.add(i);
+      }
+      return out;
+    }
+
+    function rebuildRoute() {
+      clearRouteGroup();
+      const corner = parseInt(selCorner.value);
+      if (corner === 0) return;
+
+      const fixedPath = fixCentersPath(originalPath);
+
+      let bits = new Set(CORNER_BITS[corner]);
+      const cornerSeq = [corner];
+      for (let s = 0; s < stepIndex && s < fixedPath.length; s++) {
+        if (!MOVES[fixedPath[s]]) { cornerSeq.push(cornerSeq[cornerSeq.length - 1]); continue; }
+        bits = applyMoveToBitSet(bits, fixedPath[s]);
+        cornerSeq.push(findCornerForBits(bits));
+      }
+
+      // Якоря вдоль рёбер: для диагональных (по грани) переходов вставляем промежуточный угол.
+      const anchors = [CORNER_POSITIONS[cornerSeq[0]].clone().multiplyScalar(CORNER_SCALE)];
+      for (let i = 1; i < cornerSeq.length; i++) {
+        const a = CORNER_POSITIONS[cornerSeq[i - 1]];
+        const b = CORNER_POSITIONS[cornerSeq[i]];
+        if (!a || !b || cornerSeq[i - 1] === cornerSeq[i]) continue;
+        const dx = a.x !== b.x, dy = a.y !== b.y, dz = a.z !== b.z;
+        const nd = (dx ? 1 : 0) + (dy ? 1 : 0) + (dz ? 1 : 0);
+        if (nd === 2) {
+          const inter = a.clone();
+          if (dx) inter.x = b.x; else inter.y = b.y;
+          anchors.push(inter.multiplyScalar(CORNER_SCALE));
+        } else if (nd === 3) {
+          anchors.push(new THREE.Vector3(b.x, a.y, a.z).multiplyScalar(CORNER_SCALE));
+          anchors.push(new THREE.Vector3(b.x, b.y, a.z).multiplyScalar(CORNER_SCALE));
+        }
+        anchors.push(b.clone().multiplyScalar(CORNER_SCALE));
+      }
+
+      const startMarker = new THREE.Mesh(
+        new THREE.SphereGeometry(0.08, 12, 8),
+        new THREE.MeshBasicMaterial({ color: 0x0066ff })
+      );
+      startMarker.position.copy(anchors[0]);
+      routeGroup.add(startMarker);
+
+      if (anchors.length < 2) return;
+
+      const vertices = [anchors[0].clone()];
+      for (let i = 1; i < anchors.length; i++) {
+        for (let s = 1; s <= ROUTE_SUBDIV; s++) {
+          vertices.push(new THREE.Vector3().lerpVectors(anchors[i - 1], anchors[i], s / ROUTE_SUBDIV));
+        }
+      }
+
+      const positions = new Float32Array(vertices.length * 3);
+      const colors = new Float32Array(vertices.length * 3);
+      const col = new THREE.Color();
+      for (let i = 0; i < vertices.length; i++) {
+        positions[i * 3]     = vertices[i].x;
+        positions[i * 3 + 1] = vertices[i].y;
+        positions[i * 3 + 2] = vertices[i].z;
+        // hue 240° → 0°: синий → голубой → зелёный → жёлтый → красный
+        col.setHSL((2 / 3) * (1 - i / (vertices.length - 1)), 1, 0.5);
+        colors[i * 3]     = col.r;
+        colors[i * 3 + 1] = col.g;
+        colors[i * 3 + 2] = col.b;
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ vertexColors: true }));
+      routeGroup.add(line);
+
+      const endMarker = new THREE.Mesh(
+        new THREE.SphereGeometry(0.08, 12, 8),
+        new THREE.MeshBasicMaterial({ color: 0xff2200 })
+      );
+      endMarker.position.copy(anchors[anchors.length - 1]);
+      routeGroup.add(endMarker);
+    }
+
     // Animation state
     let animating = false;
     let animGroups = []; // [{ group, parent }]
